@@ -1,0 +1,40 @@
+import socketserver
+from os.path import exists
+
+HOST =''
+PORT = 9009
+
+class MyTcpHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        data_trasferred = 0
+        print(f'연결 됨 : [{self.client_address[0]}]')
+        filename = self.request.recv(1024)
+        filename = filename.decode()
+        
+        if not exists(filename):
+            return
+        
+        print(f'파일 [{filename}] 전송 시작..')
+        with open(filename, 'rb') as f:
+            try :
+                data = f.read(1024)
+                while data :
+                    data_trasferred +=self.request.send(data)
+                    data = f.read(1024)
+                    
+            except Exception as e:
+                print(e)
+                
+        print(f'전송완료 : [{filename}], 전송량 : [{data_trasferred}]')
+
+def runserver():
+    print('+++ 파일 서버를 시작합니다.')
+    print('+++ 파일 서버를 끝내려면 Ctrl + C를 누르세요.')
+    
+    try:
+        server = socketserver.TCPServer((HOST,PORT), MyTcpHandler)
+        server.serve_forever()
+    except KeyboardInterrupt :
+        print('+++ 파일 서버를 종료합니다.')
+        
+runserver()
