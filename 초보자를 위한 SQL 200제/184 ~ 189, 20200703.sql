@@ -1,0 +1,408 @@
+-- #184 SQL로 머신러닝 구현하기(6) : RANDOM FOREST
+-- 랜덤포레스트를 사용하여 퇴사할것으로 예측되는 사원 찾기
+-- 랜덤포레스트 환경설정
+CREATE TABLE DTSETTINGS3
+AS
+SELECT *
+    FROM TABLE(DBMS_DATA_MINING.GET_DEFAULT_SETTINGS)
+    WHERE SETTING_NAME LIKE '%GLM%';
+    
+BEGIN
+    INSERT INTO DTSETTINGS3
+        VALUES (DBMS_DATA_MINING.ALGO_NAME, 'ALGO_RANDOM_FOREST');
+    INSERT INTO DTSETTINGS3
+        VALUES (DBMS_DATA_MINING.PREP_AUTO, 'ON');
+COMMIT;
+END;
+/
+
+-- 모델 생성
+BEGIN
+    DBMS_DATA_MINING.CREATE_MODEL(
+        MODEL_NAME          => 'DT_MODEL3',
+        MINING_FUNCTION     => DBMS_DATA_MINING.CLASSIFICATION,
+        DATA_TABLE_NAME     => 'HR_DATA_TRAINING',
+        CASE_ID_COLUMN_NAME => 'EMP_ID',
+        TARGET_COLUMN_NAME  => 'LEFT',
+        SETTINGS_TABLE_NAME  => 'DTSETTINGS3');
+END;
+/
+
+-- 모델 확인
+SELECT MODEL_NAME,
+        ALGORITHM,
+        MINING_FUNCTION
+    FROM ALL_MINING_MODELS
+    WHERE MODEL_NAME = 'DT_MODEL3';
+    
+-- 환경설절값 확인
+SELECT SETTING_NAME, SETTING_VALUE
+    FROM ALL_MINING_MODEL_SETTINGS
+    WHERE MODEL_NAME = 'DT_MODEL3';
+    
+-- 실제값과 예측확률 출력
+SELECT EMP_ID, T.LEFT 실제값,
+    PREDICTION (DT_MODEL3 USING *) 예측값,
+    ROUND(PREDICTION_PROBABILITY (DT_MODEL3 USING *), 2) "예측한 확률"
+        FROM HR_DATA_TEST T
+        WHERE ROWNUM < 6;
+        
+-- 머신러닝 모델의 성능 확인
+DROP TABLE HR_DATA_TEST_MATRIX_3;
+      
+CREATE OR REPLACE VIEW VIEW_HR_DATA_TEST3
+AS
+SELECT EMP_ID, PREDICTION(DT_MODEL3 USING *) PREDICTED_VALUE,
+          PREDICTION_PROBABILITY(DT_MODEL3 USING * ) PROBABILITY
+  FROM HR_DATA_TEST;
+  
+DECLARE
+   V_ACCURACY NUMBER;
+BEGIN
+   DBMS_DATA_MINING.COMPUTE_CONFUSION_MATRIX (
+      ACCURACY           => V_ACCURACY,
+      APPLY_RESULT_TABLE_NAME      => 'VIEW_HR_DATA_TEST3',
+      TARGET_TABLE_NAME       => 'HR_DATA_TEST',
+      CASE_ID_COLUMN_NAME       => 'EMP_ID',
+      TARGET_COLUMN_NAME       => 'LEFT',
+      CONFUSION_MATRIX_TABLE_NAME => 'HR_DATA_TEST_MATRIX_3',
+      SCORE_COLUMN_NAME       => 'PREDICTED_VALUE',
+      SCORE_CRITERION_COLUMN_NAME => 'PROBABILITY',
+      COST_MATRIX_TABLE_NAME      => NULL,
+      APPLY_RESULT_SCHEMA_NAME    => NULL,
+      TARGET_SCHEMA_NAME       => NULL,
+      COST_MATRIX_SCHEMA_NAME     => NULL,
+      SCORE_CRITERION_TYPE       => 'PROBABILITY');
+   DBMS_OUTPUT.PUT_LINE('**** MODEL ACCURACY ****: ' || ROUND(V_ACCURACY,4));
+END;
+/
+
+-- #185 SQL로 머신러닝 구현하기(7) : RANDOM FOREST
+-- 랜덤포레스트 성능 높이기
+-- 환경 재 구성
+DROP TABLE DTSETTINGS4;
+
+CREATE TABLE DTSETTINGS4
+AS
+SELECT *
+  FROM TABLE (DBMS_DATA_MINING.GET_DEFAULT_SETTINGS)
+  WHERE SETTING_NAME LIKE '%GLM%';
+
+BEGIN
+
+   INSERT INTO DTSETTINGS4
+     VALUES (DBMS_DATA_MINING.ALGO_NAME, 'ALGO_RANDOM_FOREST');
+
+   INSERT INTO DTSETTINGS4
+     VALUES (DBMS_DATA_MINING.PREP_AUTO, 'ON');
+
+  INSERT INTO DTSETTINGS4
+    VALUES (DBMS_DATA_MINING.CLAS_MAX_SUP_BINS, 254);
+
+COMMIT;
+END;
+/
+
+-- 모델 생성
+BEGIN
+    DBMS_DATA_MINING.DROP_MODEL('DT_MODEL4');
+END;
+/
+
+BEGIN
+    DBMS_DATA_MINING.CREATE_MODEL(
+        MODEL_NAME              => 'DT_MODEL4',
+        MINING_FUNCTION         => DBMS_DATA_MINING.CLASSIFICATION,
+        DATA_TABLE_NAME         => 'HR_DATA_TRAINING',
+        CASE_ID_COLUMN_NAME     => 'EMP_ID',
+        TARGET_COLUMN_NAME      => 'LEFT',
+        SETTINGS_TABLE_NAME     => 'DTSETTINGS4');
+END;
+/
+
+-- 모델 확인
+SELECT MODEL_NAME,
+        ALGORITHM,
+        MINING_FUNCTION
+    FROM ALL_MINING_MODELS
+    WHERE MODEL_NAME = 'DT_MODEL4';
+    
+-- 모델 설정 확인(파라미터 수정된것)
+SELECT SETTING_NAME, SETTING_VALUE
+    FROM ALL_MINING_MODEL_SETTINGS
+    WHERE MODEL_NAME = 'DT_MODEL4';
+    
+-- 머신러닝 모델 성능 확인
+DROP TABLE HR_DATA_TEST_MATRIX_4;
+      
+CREATE OR REPLACE VIEW VIEW_HR_DATA_TEST4
+AS
+SELECT EMP_ID, PREDICTION(DT_MODEL4 USING *) PREDICTED_VALUE,
+           PREDICTION_PROBABILITY(DT_MODEL4 USING * ) PROBABILITY
+  FROM HR_DATA_TEST;
+  
+DECLARE
+   V_ACCURACY NUMBER;
+BEGIN
+   DBMS_DATA_MINING.COMPUTE_CONFUSION_MATRIX (
+      ACCURACY           => V_ACCURACY,
+      APPLY_RESULT_TABLE_NAME      => 'VIEW_HR_DATA_TEST4',
+      TARGET_TABLE_NAME       => 'HR_DATA_TEST',
+      CASE_ID_COLUMN_NAME       => 'EMP_ID',
+      TARGET_COLUMN_NAME       => 'LEFT',
+      CONFUSION_MATRIX_TABLE_NAME => 'HR_DATA_TEST_MATRIX_4',
+      SCORE_COLUMN_NAME       => 'PREDICTED_VALUE',
+      SCORE_CRITERION_COLUMN_NAME => 'PROBABILITY',
+      COST_MATRIX_TABLE_NAME      => NULL,
+      APPLY_RESULT_SCHEMA_NAME    => NULL,
+      TARGET_SCHEMA_NAME       => NULL,
+      COST_MATRIX_SCHEMA_NAME     => NULL,
+      SCORE_CRITERION_TYPE       => 'PROBABILITY');
+   DBMS_OUTPUT.PUT_LINE('**** MODEL ACCURACY ****: ' || ROUND(V_ACCURACY,4));
+END;
+/
+
+-- #186 SQL로 머신러닝 구현하기
+-- 185번의 예제를 질문에 답변받아 쓰는것
+SET SERVEROUTPUT ON
+SET VERIFY OFF
+
+ACCEPT P_SATIS PROMPT '회사 만족도는 어떻게 되시나요? 범위: 0~1 (예: 0.32) '
+ACCEPT P_EVALU PROMPT '마지막 근무 평가는 어떻게 되시나요? 범위:0~1 (예: 0.8) '
+ACCEPT P_PROJECT PROMPT '진행했던 프로젝트의 갯수는 어떻게 되시나요? (예: 3) '
+ACCEPT P_AVG_MONTH_HOURS PROMPT '월 평균 근무시간은 어떻게 되시나요? (예: 160)'
+ACCEPT P_TIME_SPEND_COMP PROMPT '근무년수는 어떻게 되나요? (예: 3) '
+ACCEPT P_WORK_ACC PROMPT '근무하는 동안 일으킨 사고 건수는? (예: 2)'
+ACCEPT P_PROMO_LAST_5Y PROMPT '지난 5년동안 승진한 횟수는? (예: 2) '
+PROMPT 'SALES/PRODUCT_MNG/ACCOUNTING/HR/IT/RANDD/TECHNICAL/MANAGEMENT/MARKETING/SUPPORT '
+ACCEPT P_SALES PROMPT '일하는 부서는 어디입니까? '
+ACCEPT P_SALARY PROMPT '월급의 수준은? (예: LOW/MEDIUM/HIGH) '
+
+DECLARE  
+   V_PRED    VARCHAR2(20);
+   V_PROB    NUMBER(10,2);
+
+BEGIN 
+WITH TEST_DATA AS ( SELECT UPPER('&P_SATIS') SATISFACTION_LEVEL,
+                                        UPPER('&P_EVALU') LAST_EVALUATION, 
+                                        UPPER('&P_PROJECT') NUMBER_PROJECT, 
+                                        UPPER('&P_AVG_MONTH_HOURS') AVERAGE_MONTLY_HOURS,
+                                        UPPER('&P_TIME_SPEND_COMP') TIME_SPEND_COMPANY,
+                                        UPPER('&P_WORK_ACC') WORK_ACCIDENT,
+                                        UPPER('&P_PROMO_LAST_5Y') PROMOTION_LAST_5YEARS,
+                                        UPPER('&P_SALES') SALES,
+                                        UPPER('&P_SALARY') SALARY
+                                FROM DUAL )
+SELECT PREDICTION (DT_MODEL4 USING *),
+          PREDICTION_PROBABILITY(DT_MODEL4  USING * )  INTO V_PRED, V_PROB
+  FROM TEST_DATA ;
+
+IF  V_PRED = 1  THEN 
+
+  DBMS_OUTPUT.PUT_LINE('머신러닝이 예측한 결과: 퇴사할 직원입니다. 퇴사할 확률은 ' || ROUND(V_PROB,2) * 100 || '%입니다');
+
+ELSE 
+
+  DBMS_OUTPUT.PUT_LINE('머신러닝이 예측한 결과: 퇴사할 직원이 아닙니다. 퇴사하지 않을 확률은 ' || ROUND(V_PROB,2) * 100 || '%입니다');
+
+END IF;
+
+END;
+/
+
+-- #187 SQL로 머신러닝 구현하기(9) : 신경망
+-- 건출물 재료로 쓰이는 콘트리트의 강도를 높이려면 어떻게 재료를 조합해야하는지
+-- 데이터 생성 후 데이터 입력
+DROP TABLE CONCRETE;
+
+CREATE TABLE CONCRETE
+(  C_ID          NUMBER(10),
+  CEMENT      NUMBER(20,4),
+  SLAG	        NUMBER(20,4),
+  ASH	        NUMBER(20,4),
+  WATER	NUMBER(20,4),
+  SUPERPLASTIC NUMBER(20,4),
+  COARSEAGG	 NUMBER(20,4),
+  FINEAGG	 NUMBER(20,4),
+  AGE	         NUMBER(20,4),
+  STRENGTH     NUMBER(20,4)  );
+
+
+-- 훈련 데이터와 테스트 데이터를 9:1 비율로 나눔
+DROP TABLE CONCRETE_TRAIN; 
+
+CREATE TABLE CONCRETE_TRAIN
+AS
+   SELECT *
+     FROM CONCRETE
+     WHERE C_ID < 931;
+
+DROP TABLE CONCRETE_TEST;
+
+CREATE TABLE CONCRETE_TEST
+AS
+   SELECT *
+     FROM CONCRETE
+     WHERE C_ID >= 931;
+     
+-- 머신러닝 환경설정
+DROP TABLE SETTINGS_GLM;
+
+CREATE TABLE SETTINGS_GLM
+AS
+SELECT *
+  FROM TABLE (DBMS_DATA_MINING.GET_DEFAULT_SETTINGS)
+  WHERE SETTING_NAME LIKE '%GLM%';
+
+BEGIN
+
+  INSERT INTO SETTINGS_GLM(SETTING_NAME, SETTING_VALUE)
+    VALUES (DBMS_DATA_MINING.ALGO_NAME, DBMS_DATA_MINING.ALGO_NEURAL_NETWORK);
+  
+  INSERT INTO SETTINGS_GLM (SETTING_NAME, SETTING_VALUE)
+    VALUES (DBMS_DATA_MINING.PREP_AUTO, DBMS_DATA_MINING.PREP_AUTO_ON);
+
+END;
+/
+
+-- 머신러닝 모델을 생성
+
+BEGIN
+ DBMS_DATA_MINING.DROP_MODEL('MD_GLM_MODEL');
+END;
+/
+
+BEGIN
+   DBMS_DATA_MINING.CREATE_MODEL(
+      MODEL_NAME          => 'MD_GLM_MODEL',
+      MINING_FUNCTION     => DBMS_DATA_MINING.REGRESSION,
+      DATA_TABLE_NAME      => 'CONCRETE_TRAIN',
+      CASE_ID_COLUMN_NAME => 'C_ID',
+      TARGET_COLUMN_NAME => 'STRENGTH',
+      SETTINGS_TABLE_NAME => 'SETTINGS_GLM');
+END;
+/
+
+-- 생성된 모델을 확인
+
+SELECT MODEL_NAME,
+          ALGORITHM,
+          MINING_FUNCTION
+  FROM ALL_MINING_MODELS
+  WHERE MODEL_NAME = 'MD_GLM_MODEL';
+
+--  인공신경망의 환경 구성정보를 확인
+SELECT SETTING_NAME, SETTING_VALUE
+  FROM ALL_MINING_MODEL_SETTINGS
+  WHERE MODEL_NAME = 'MD_GLM_MODEL'  
+  AND SETTING_NAME = 'NNET_HIDDEN_LAYERS';
+
+-- 신경망 모델이 예측한 결과를 확인
+SELECT C_ID, STRENGTH 실제값, ROUND( PREDICTION(MD_GLM_MODEL USING *),2) 예측값
+  FROM CONCRETE_TEST;
+
+-- 실제 값과 예측 값 간의 상관관계를 확인
+SELECT ROUND(CORR(PREDICTED_VALUE, STRENGTH),2) 상관관계
+  FROM ( 
+            SELECT C_ID, PREDICTION(MD_GLM_MODEL USING *) PREDICTED_VALUE,
+                      PREDICTION_PROBABILITY(MD_GLM_MODEL USING * ) PROB, STRENGTH
+              FROM CONCRETE_TEST
+      );
+      
+-- #188 SQL로 머신러닝 구현하기(10) : 신경망
+-- 콘크리트 강도를 예측하는 인공신경망의 layer수와 neuran의 개수를 늘림
+-- 은닉 계층을 1층에서 2층으로 생성
+DROP TABLE SETTINGS_GLM;
+
+CREATE TABLE SETTINGS_GLM
+AS
+SELECT *
+  FROM TABLE (DBMS_DATA_MINING.GET_DEFAULT_SETTINGS)
+  WHERE SETTING_NAME LIKE '%GLM%';
+
+BEGIN
+  INSERT INTO SETTINGS_GLM(SETTING_NAME, SETTING_VALUE)
+    VALUES (DBMS_DATA_MINING.ALGO_NAME, DBMS_DATA_MINING.ALGO_NEURAL_NETWORK);
+  
+  INSERT INTO SETTINGS_GLM (SETTING_NAME, SETTING_VALUE)
+    VALUES (DBMS_DATA_MINING.PREP_AUTO, DBMS_DATA_MINING.PREP_AUTO_ON);
+
+  INSERT INTO SETTINGS_GLM (SETTING_NAME, SETTING_VALUE)
+    VALUES (DBMS_DATA_MINING.NNET_NODES_PER_LAYER, '100,100');
+
+END;
+/
+
+-- 머신러닝 모델을 생성
+
+BEGIN
+  DBMS_DATA_MINING.DROP_MODEL('MD_GLM_MODEL');
+END;
+/
+
+BEGIN
+   DBMS_DATA_MINING.CREATE_MODEL(
+      MODEL_NAME          => 'MD_GLM_MODEL',
+      MINING_FUNCTION     => DBMS_DATA_MINING.REGRESSION,
+      DATA_TABLE_NAME     => 'CONCRETE_TRAIN',
+      CASE_ID_COLUMN_NAME => 'C_ID',
+      TARGET_COLUMN_NAME => 'STRENGTH',
+      SETTINGS_TABLE_NAME => 'SETTINGS_GLM');
+END;
+/
+
+-- 인공신경망의 환경 구성정보를 확인
+SELECT SETTING_NAME, SETTING_VALUE
+  FROM ALL_MINING_MODEL_SETTINGS
+  WHERE MODEL_NAME = 'MD_GLM_MODEL'  
+  AND SETTING_NAME IN ('NNET_HIDDEN_LAYERS','NNET_NODES_PER_LAYER');
+
+
+-- 신경망 모델이 예측한 결과를 확인
+
+SELECT C_ID, STRENGTH 실제값, ROUND( PREDICTION(MD_GLM_MODEL USING *),2) 예측값
+  FROM CONCRETE_TEST;
+ 
+-- 실제 값과 예측 값 간의 상관관계를 확인
+
+SELECT ROUND(CORR(PREDICTED_VALUE, STRENGTH),2) 상관관계
+  FROM ( 
+           SELECT C_ID, PREDICTION(MD_GLM_MODEL USING *) PREDICTED_VALUE,
+                     PREDICTION_PROBABILITY(MD_GLM_MODEL USING * ) PROB, STRENGTH
+  FROM CONCRETE_TEST
+      );
+      
+-- #189 SQL로 머신러닝 구현하기(11) : 신경망
+-- 인공지능신경망 모델에게 질문하여 답변을 받아 출력하는 PL/SQL프로그래밍
+set serveroutput on
+set verify off
+
+accept p_cement prompt '시멘트의 총량을 입력하세요? 단위:kg (범위: 0~540) '
+accept p_salg prompt '슬래그 시멘트의 총량을 입력하세요? 단위:kg (범위: 0~360) '
+accept p_ash prompt '회분의 총량을 입력하세요? 단위:kg (예: 0~195) '
+accept p_water prompt '물의 총량을 입력하세요? 단위:kg (예: 0~137) '
+accept p_superplastic prompt '고성능 감수제의 총량을 입력하세요? 단위:kg (범위: 0~32) '
+accept p_coarseagg prompt '굵은 자갈의 총량을 입력하세요? 단위:kg (예: 0~1125)'
+accept p_fineagg prompt '잔 자갈의 총량을 입력하세요? 단위:kg (예: 0~594) '
+accept p_age prompt '숙성 기간을 입력하세요? 단위: day (예: 0~ 365) '
+
+declare  
+   v_pred    varchar2(20);
+
+begin 
+with test_data as ( select  '&p_cement' CEMENT,
+                                   '&p_salg' SLAG, 
+                                   '&p_ash' ASH, 
+                                   '&p_water' WATER,
+                                   '&p_superplastic' SUPERPLASTIC,
+                                   '&p_coarseagg' COARSEAGG,
+                                   '&p_fineagg' FINEAGG,
+                                   '&p_age' AGE 
+                            from dual)
+SELECT PREDICTION (MD_GLM_MODEL   USING *) into v_pred
+  FROM test_data ;
+
+ dbms_output.put_line('머신러닝이 예측한 콘크리트 강도는 ' || round(v_pred,2) || '입니다. 테스트 데이터의 최대 강도는 82.6 입니다');
+
+end;
+/
